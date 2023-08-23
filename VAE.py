@@ -180,7 +180,7 @@ mci = mci.dropna()
 
 # scale data
 scaler = StandardScaler()
-mci = scaler.fit_transform(mci)
+x = scaler.fit_transform(mci)
 
 
 # # split data into train and validation
@@ -240,7 +240,7 @@ def loss_function(x_hat, x, mu, logvar):
 #     kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss, kld, recon_loss + kld
 
-x = torch.tensor(mci, dtype=torch.float32)
+x = torch.tensor(x, dtype=torch.float32)
 
 # Training loop
 # for epoch in range(100):
@@ -285,4 +285,9 @@ for epoch in range(10000):
         f'Epoch: {epoch + 1}, Recon Loss: {recon_loss.item():.4f}, KLD: {kld.item():.4f}, Total Loss: {total_loss.item():.4f}')
 
 
-
+# generate new data
+z = torch.randn(100, 2)
+x_hat = model.decoder(z)
+x_hat = x_hat.detach().numpy()
+x_hat = scaler.inverse_transform(x_hat)
+x_hat = pd.DataFrame(x_hat, columns=mci.columns)
