@@ -3,6 +3,9 @@ import torch
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+from torch.utils.data import TensorDataset, DataLoader
+
+
 # create a variational autoencoder for synthetic data generation
 
 class encoder(nn.Module):
@@ -27,7 +30,7 @@ class encoder(nn.Module):
             activation(),
             nn.Linear(self.hidden_dim, self.hidden_dim),
             activation(),
-            nn.Linear(self.hidden_dim, self.latent_dim * 2)
+            nn.Linear(self.hidden_dim, output_dim)
         )
 
         # for layer in self.encoder:
@@ -81,7 +84,7 @@ class VAE(nn.Module):
         self.latent_dim = latent_dim
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(0.2)
         self.activation = activation
 
         self.encoder = encoder(latent_dim, input_dim, hidden_dim, dropout, activation)
@@ -170,22 +173,25 @@ codes = {'CN_MCI': 0, 'Dementia': 1}
 mci['last_DX'].replace(codes, inplace=True)
 mci = mci.drop(['Unnamed: 0'], axis=1)
 
-# convert to float32
-mci = mci.astype('float32')
+mci.dtypes
+#
+# # get column names of int columns
+# int_cols = mci.select_dtypes(include=['int64']).columns
+#
+# flot_cols = mci.select_dtypes(include=['float64']).columns
 
-mci.head()
+# convert to float32
+mci.iloc[:,3:] = mci.iloc[:,3:].astype('float32')
 
 # drop nan values
 mci = mci.dropna()
-
 # scale data
 scaler = StandardScaler()
-x = scaler.fit_transform(mci)
+x = scaler.fit_transform(mci.iloc[:,3:])
+combined = np.concatenate((mci.iloc[:,:3], x), axis=1)
 
-
-# # split data into train and validation
-# train, val = train_test_split(mci, test_size=0.2, random_state=42)
-
+batch_size = 32
+train_loader = torch.tensor(combined, dtype=torch.float32)
 # define model
 model = VAE(latent_dim=2, input_dim=91, hidden_dim=2, dropout=0.1)
 
@@ -240,7 +246,7 @@ def loss_function(x_hat, x, mu, logvar):
 #     kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss, kld, recon_loss + kld
 
-x = torch.tensor(x, dtype=torch.float32)
+# x = torch.tensor(combined, dtype=torch.float32)
 
 # Training loop
 # for epoch in range(100):
@@ -266,10 +272,10 @@ for epoch in range(10000):
     # Forward pass
     # x = torch.tensor(train.values, dtype=torch.float32)
     # x_val = torch.tensor(val.values, dtype=torch.float32)
-    x_hat, mu, logvar = model(x)
+    x_hat, mu, logvar = model(train_loader)
 
     # Compute loss components
-    recon_loss, kld, total_loss = loss_function(x_hat, x, mu, logvar)
+    recon_loss, kld, total_loss = loss_function(x_hat, train_loader, mu, logvar)
 
     # Print mu and logvar statistics
     print(
@@ -286,8 +292,23 @@ for epoch in range(10000):
 
 
 # generate new data
-z = torch.randn(100, 2)
+z = torch.randn(214, 2)
 x_hat = model.decoder(z)
 x_hat = x_hat.detach().numpy()
 x_hat = scaler.inverse_transform(x_hat)
 x_hat = pd.DataFrame(x_hat, columns=mci.columns)
+
+# if x_hat last_DX is less than 0.6, then it is CN_MCI, else it is Dementia
+x_hat['last_DX'] = np.where(x_hat['last_DX'] < 0.6, 0, 1)
+
+x_hat['last_DX'].value_counts()
+
+185/(29+185)
+
+mci['last_DX'].value_counts()
+
+156/(58+156)
+
+# save generated data
+x_hat.to_csv('data/generated__mci_data.csv')
+
