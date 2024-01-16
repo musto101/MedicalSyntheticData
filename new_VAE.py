@@ -101,25 +101,13 @@ class VAE(nn.Module):
 
 
 
-mci = pd.read_csv('data/mci_preprocessed_wo_csf.csv')
-codes = {'CN_MCI': 0, 'Dementia': 1}
-mci['last_DX'].replace(codes, inplace=True)
-mci = mci.drop(['Unnamed: 0'], axis=1)
+mci = pd.read_csv('data/mci_preprocessed_wo_csf_vae.csv')
 
-mci.dtypes
-
-# convert to float32
-mci.iloc[:,3:] = mci.iloc[:,3:].astype('float32')
-
-# drop nan values
-mci = mci.dropna()
-# scale data
-scaler = StandardScaler()
-x = scaler.fit_transform(mci.iloc[:,3:])
-combined = np.concatenate((mci.iloc[:,:3], x), axis=1)
+# convert to numpy array
+mci_np = mci.values
 
 batch_size = 32
-train_loader = torch.tensor(combined, dtype=torch.float32)
+train_loader = torch.tensor(mci_np, dtype=torch.float32)
 # define model
 model = VAE(latent_dim=2, input_dim=91, hidden_dim=2, dropout=0)
 
@@ -148,7 +136,7 @@ def loss_function(x_hat, x, mu, logvar):
 
 
 # # Training loop
-for epoch in range(1000):
+for epoch in range(100000):
     # Forward pass
     # x = torch.tensor(train.values, dtype=torch.float32)
     # x_val = torch.tensor(val.values, dtype=torch.float32)
@@ -172,13 +160,13 @@ for epoch in range(1000):
 
 #
 # # generate new data
-# z = torch.randn(214, 2)
-# x_hat = model.decoder(z)
-# x_hat = x_hat.detach().numpy()
-# #x_hat = scaler.inverse_transform(x_hat)
-# x_hat = pd.DataFrame(x_hat, columns=mci.columns)
-#
-#
-# # save generated data
-# x_hat.to_csv('data/generated__mci_data.csv')
+z = torch.randn(214, 2)
+x_hat = model.decoder(z)
+x_hat = x_hat.detach().numpy()
+#x_hat = scaler.inverse_transform(x_hat)
+x_hat = pd.DataFrame(x_hat, columns=mci.columns)
+
+
+# save generated data
+x_hat.to_csv('data/generated__mci_data.csv')
 

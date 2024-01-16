@@ -7,6 +7,10 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+bin/
+lib64
+paper_drafts/
+pyvenv.cfg
 .Python
 build/
 develop-eggs/
