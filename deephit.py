@@ -5,12 +5,16 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 import pycox
+from sklearn_pandas import DataFrameMapper
 
 # read in data
-data = pd.read_csv('data/generated_cn_data_clean.csv')
+data = pd.read_csv('data/generated_cn_data_clean2.csv')
 
 # print counts of last_DX
 print(data['last_DX'].value_counts())
+
+# print summary statistics for last_visit
+print(data['last_visit'].describe())
 
 # split data into train and test sets
 train, test = train_test_split(data, test_size=0.2, random_state=0)
@@ -37,11 +41,11 @@ params = {
     'epochs': [50, 100, 150]
 }
 
+# transform data for deephit model
+train = pycox.models.utils.make_dataloader(train, y_train)
+
 # create grid search
-grid_search = DeepHitSingle.grid_search(train, y_train, val, y_val, params, metrics=['concordance_index'])
+grid_search = pycox.models.DeepHitSingle.fit(train, y_train, val, y_val, params, metrics=['concordance_index'])
 
-
-# run deephit model
-model = DeepHitSingle()
 
 

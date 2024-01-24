@@ -1,59 +1,95 @@
 # run survival xgboost model on synth data
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from lifelines import CoxPHFitter
-from sklearn.model_selection import train_test_split
 import xgboost as xgb
-from xgboost import XGBClassifier
-from sklearn.model_selection import GridSearchCV
+from lifelines.utils import concordance_index
+from sklearn.model_selection import KFold
 
 data = pd.read_csv('data/generated_mci_data_clean2.csv')
 
-# prin counts of last_DX
-print(data['last_DX'].value_counts())
+test = data.sample(frac=0.2, random_state=42)
+train = data.drop(test.index)
 
-# split data into train and test sets
-train, test = train_test_split(data, test_size=0.2, random_state=0)
+# Splitting the data into features and target
+X = train.drop(['last_DX', 'last_visit'], axis=1)
+y = train[['last_visit', 'last_DX']]
 
-# create validation set
-train, val = train_test_split(train, test_size=0.2, random_state=0)
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
-# split train, val, and test sets into X and y with y containing last_DX and last_visit
-y_train = train[['last_DX', 'last_visit']]
-train = train.drop(['last_DX', 'last_visit'], axis=1)
-y_val = val[['last_DX', 'last_visit']]
-val = val.drop(['last_DX', 'last_visit'], axis=1)
-y_test = test[['last_DX', 'last_visit']]
-test = test.drop(['last_DX', 'last_visit'], axis=1)
-
-# run survival xgboost model
-xgb_model = XGBClassifier(objective="survival:cox", random_state=0)
-
-# define parameters
 params = {
-    'objective': ["survival:cox"],
-    'eval_metric': ["cox-nloglik"],
-    'booster': ["gbtree"],
-    'nthread': [-1],
-    'n_estimators': [5, 10, 20, 50, 100],
-    'max_depth': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    'objective': "survival:cox",
+    'eval_metric': "cox-nloglik",
+    'booster': "gbtree",
+    'nthread': -1,
+    'num_boost_round': [50, 100],
+    'max_depth': [1, 5, 10],
     'learning_rate': [0.001, 0.01],
     'eta': [0.01, 0.1],
-    'min_child_weight': [0.0001, 0.001, 0.01],
-    'alpha': [0.001, 0.01, 0.1],
-    'gamma': [0, 0.1, 0.2, 1]
+    'min_child_weight': [0.0001, 0.001],
+    'alpha': [0.001, 0.01],  # Changed from tuple to list
+    'gamma': [0, 0.1, 0.2]
 }
 
-# define grid search
-grid_search = GridSearchCV(estimator=xgb_model, param_grid=params, cv=5, verbose=1, n_jobs=-1)
+c_indices = []
+best_params = {}
+for num_boost_round in params['num_boost_round']:
+    print(f"n_estimators: {num_boost_round}")
+    for max_depth in params['max_depth']:
+        print(f"max_depth: {max_depth}")
+        for learning_rate in params['learning_rate']:
+            print(f"learning_rate: {learning_rate}")
+            for eta in params['eta']:
+                print(f"eta: {eta}")
+                for min_child_weight in params['min_child_weight']:
+                    print(f"min_child_weight: {min_child_weight}")
+                    for alpha in params['alpha']:
+                        print(f"alpha: {alpha}")
+                        for gamma in params['gamma']:
+                            print(f"gamma: {gamma}")
+                            current_params = {
+                                'objective': "survival:cox",
+                                'eval_metric': "cox-nloglik",
+                                'booster': "gbtree",
+                                'nthread': -1,
+                                'num_boost_round': num_boost_round,
+                                'max_depth': max_depth,
+                                'learning_rate': learning_rate,
+                                'eta': eta,
+                                'min_child_weight': min_child_weight,
+                                'alpha': alpha,
+                                'gamma': gamma
+                            }
+                            for train_idx, test_idx in kf.split(X):
+                                X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+                                y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
-# fit grid search with early stopping
-grid_search.fit(train, y_train, early_stopping_rounds=5, eval_set=[(val, y_val)])
+                                dtrain = xgb.DMatrix(X_train, label=y_train['last_visit'], weight=y_train['last_DX'])
+                                dtest = xgb.DMatrix(X_test, label=y_test['last_visit'], weight=y_test['last_DX'])
 
-# print best parameters
-print(grid_search.best_params_)
+                                # print(f"Training fold {train_idx + 1}")
+                                bst = xgb.train(current_params, dtrain, early_stopping_rounds=5, evals=[(dtest, 'eval')], )
+                                print(f"Best score: {bst.best_score}")
+                                # best_params.update(bst.best_params)
 
-# print best score
-print(grid_search.best_score_)
+                                # calculate concordance index for test set
+                                c_index = concordance_index(y_test['last_visit'], -bst.predict(dtest))
+                                c_indices.append(c_index)
+                                print(f"Concordance index: {c_index}")
 
+                                # save best parameters
+                                if c_index == max(c_indices):
+                                    best_params = current_params
+
+
+print(f"Best parameters: {best_params}")
+
+# run survival xgboost model with best parameters
+dtrain = xgb.DMatrix(X, label=y['last_visit'], weight=y['last_DX'])
+dtest = xgb.DMatrix(test.drop(['last_DX', 'last_visit'], axis=1), label=test['last_visit'], weight=test['last_DX'])
+
+
+final_model = xgb.train(best_params, dtrain)
+
+y_test = test[['last_visit', 'last_DX']]
+# calculate concordance index for test set
+c_index = concordance_index(y_test['last_visit'], -final_model.predict(dtest))
+print(f"Test Concordance index: {c_index}")

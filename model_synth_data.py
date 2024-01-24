@@ -15,12 +15,32 @@ print(data['last_DX'].describe())
 print(data['last_DX'].value_counts())
 
 # plot histogram of last_DX
-plt.hist(data['last_DX'])
-plt.show()
+# plt.hist(data['last_DX'])
+# plt.show()
 
 # change last_DX to 0 and 1 based on median with values lower than median = 0 and values higher than median = 1
 median = data['last_DX'].median()
 data['last_DX'] = np.where(data['last_DX'] <= median, 0, 1)
+
+# Find the minimum and maximum values in the 'last_visit' column
+min_value = data['last_visit'].min()
+max_value = data['last_visit'].max()
+
+# Normalize the 'last_visit' column to a scale of 0 to the range (max - min)
+# This will set the lowest value to 0 and the highest to (max - min)
+data['normalized_last_visit'] = ((data['last_visit'] - min_value) / (max_value - min_value))
+
+# Scale this to a range of integers
+# Assuming the range represents a number of months between 6 and a maximum value
+# Adjust the scale as needed based on the actual range of the study
+min_months = 6  # Minimum months since baseline
+max_months = 60  # Example maximum number of months
+range_months = max_months - min_months
+data['last_visit'] = (data['normalized_last_visit'] * range_months + min_months).round().astype(int)
+
+
+# remove normalized_last_visit column
+data = data.drop(['normalized_last_visit'], axis=1)
 
 # print value counts for last_DX
 print(data['last_DX'].value_counts())
@@ -37,11 +57,11 @@ cph.fit(train, duration_col='last_visit', event_col='last_DX')
 cph.print_summary()
 
 # plot baseline survival curve
-cph.plot()
-plt.show()
+# cph.plot()
+# plt.show()
 
 # predict survival curve for test set
-cph.predict_survival_function(test).plot()
+cph.predict_survival_function(test)
 
 # calculate concordance index for test set
 cph.score(test, scoring_method="concordance_index")

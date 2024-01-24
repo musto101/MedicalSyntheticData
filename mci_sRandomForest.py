@@ -9,7 +9,7 @@ from sklearn.model_selection import GridSearchCV
 from lifelines.utils import concordance_index
 
 # read in data
-data = pd.read_csv('data/generated_cn_data_clean2.csv')
+data = pd.read_csv('data/generated_mci_data_clean2.csv')
 
 # change last_DX to boolean
 data['last_DX'] = data['last_DX'].astype(bool)
@@ -59,16 +59,11 @@ print(grid_search.best_params_)
 print(grid_search.best_score_)
 
 # use best model to predict on test set
-y_pred = grid_search.predict(test)
+y_pred = grid_search.predict(test) # 0.85
 
 # round predictions to nearest integer
 y_pred = np.round(y_pred)
 
 # calculate concordance index for test set
-concordance_index(y_test['last_visit'], -y_pred) # 0.85
-
-
-
-
-
+concordance_index(y_test['last_visit'], -y_pred)
 
